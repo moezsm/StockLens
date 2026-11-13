@@ -1,0 +1,6 @@
+{
+  "name": "StockLens",
+  "description": "AI-powered photo inventory manager for pantries, restaurant kitchens, and retail stores with receipt, fridge, and shelf scanning, waste & restock alerts, and Free/Premium tiers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

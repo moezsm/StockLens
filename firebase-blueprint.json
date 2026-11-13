@@ -1,0 +1,228 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile storing selected role persona, subscription tier (free or premium), and active store workspace.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID owning this profile."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name shown in profile and reports."
+        },
+        "email": {
+          "type": "string",
+          "description": "Optional user email address."
+        },
+        "persona": {
+          "type": "string",
+          "enum": ["pantry", "chef", "store"],
+          "description": "Active operational mode: Home Pantry, Chef Kitchen, or Store Owner."
+        },
+        "tier": {
+          "type": "string",
+          "enum": ["free", "premium"],
+          "description": "Subscription profile tier: free or premium."
+        },
+        "activeStoreId": {
+          "type": "string",
+          "description": "Currently selected store/location document ID."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "displayName", "persona", "tier", "activeStoreId", "createdAt", "updatedAt"]
+    },
+    "StoreLocation": {
+      "title": "StoreLocation",
+      "description": "A pantry, kitchen, retail store, or warehouse inventory workspace.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name of the store or pantry."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["pantry", "kitchen", "retail", "warehouse"],
+          "description": "Type of storage location."
+        },
+        "address": {
+          "type": "string",
+          "description": "Optional address or room note."
+        },
+        "isDefault": {
+          "type": "boolean",
+          "description": "Whether this is the primary default location."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["userId", "name", "type", "isDefault", "createdAt", "updatedAt"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Tracked stock item in a specific store or pantry location.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID."
+        },
+        "storeId": {
+          "type": "string",
+          "description": "Parent StoreLocation document ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Item or ingredient name."
+        },
+        "category": {
+          "type": "string",
+          "description": "Product category (Produce, Dairy, Pantry, Beverages, Meat, Dry Goods, Supplies, etc.)."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Current stock quantity on hand."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measure (pcs, kg, g, L, ml, boxes, bottles)."
+        },
+        "minThreshold": {
+          "type": "number",
+          "description": "Minimum stock par level before restock alert triggers."
+        },
+        "maxThreshold": {
+          "type": "number",
+          "description": "Maximum stock par level before overstock warning triggers (0 if unset)."
+        },
+        "unitCost": {
+          "type": "number",
+          "description": "Estimated unit price/cost in USD."
+        },
+        "expiryEpochMs": {
+          "type": "integer",
+          "description": "Expiration date in epoch milliseconds (0 if non-perishable)."
+        },
+        "lastScanType": {
+          "type": "string",
+          "enum": ["receipt", "fridge", "stock", "manual"],
+          "description": "How this item was most recently updated."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["userId", "storeId", "name", "category", "quantity", "unit", "minThreshold", "maxThreshold", "unitCost", "expiryEpochMs", "lastScanType", "createdAt", "updatedAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Audit log for photo scans, ingredient consumption, waste reports, and restock purchase orders.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID."
+        },
+        "storeId": {
+          "type": "string",
+          "description": "Parent StoreLocation document ID."
+        },
+        "itemId": {
+          "type": "string",
+          "description": "Optional related InventoryItem document ID."
+        },
+        "itemName": {
+          "type": "string",
+          "description": "Item name or scan batch label."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["scan_in", "consumed", "waste", "restock_order", "adjustment"],
+          "description": "Activity event type."
+        },
+        "quantityDelta": {
+          "type": "number",
+          "description": "Quantity added, consumed, wasted, or ordered."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measure."
+        },
+        "estimatedValue": {
+          "type": "number",
+          "description": "Monetary value associated with this log (e.g., waste cost or order cost)."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional reason or note (e.g., Spoiled, Receipt Scan, Low Stock Auto-Order)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["logged", "pending", "ordered", "received"],
+          "description": "Workflow status, supporting restock order lifecycle."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": ["userId", "storeId", "itemName", "type", "quantityDelta", "unit", "estimatedValue", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Per-user profile, active persona, and Free/Premium tier state."
+    },
+    "/users/{userId}/stores/{storeId}": {
+      "schema": { "$ref": "#/entities/StoreLocation" },
+      "description": "Stores, kitchens, or pantries owned by the user."
+    },
+    "/users/{userId}/items/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Digital inventory items belonging to the user's stores."
+    },
+    "/users/{userId}/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Scan logs, waste tracking, usage history, and automated restock orders."
+    }
+  }
+}

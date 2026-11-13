@@ -1,0 +1,191 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function storeExistsAfter(userId, storeId) {
+      return existsAfter(/databases/$(database)/documents/users/$(userId)/stores/$(storeId));
+    }
+
+    // --- Validation Helpers ---
+    function isValidUserProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             (!('email' in data) || data.email == null || (data.email is string && data.email.size() <= 120)) &&
+             data.persona in ['pantry', 'chef', 'store'] &&
+             data.tier in ['free', 'premium'] &&
+             data.activeStoreId is string && data.activeStoreId.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidStoreLocation(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             data.type in ['pantry', 'kitchen', 'retail', 'warehouse'] &&
+             (!('address' in data) || data.address == null || (data.address is string && data.address.size() <= 120)) &&
+             data.isDefault is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidInventoryItem(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             isValidId(data.storeId) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             data.quantity is number && data.quantity >= 0 && data.quantity <= 1000000 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+             data.minThreshold is number && data.minThreshold >= 0 && data.minThreshold <= 1000000 &&
+             data.maxThreshold is number && data.maxThreshold >= 0 && data.maxThreshold <= 1000000 &&
+             data.unitCost is number && data.unitCost >= 0 && data.unitCost <= 1000000 &&
+             data.expiryEpochMs is int && data.expiryEpochMs >= 0 &&
+             data.lastScanType in ['receipt', 'fridge', 'stock', 'manual'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidActivityLog(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             isValidId(data.storeId) &&
+             (!('itemId' in data) || data.itemId == null || (data.itemId is string && data.itemId.size() <= 128)) &&
+             data.itemName is string && data.itemName.size() >= 1 && data.itemName.size() <= 80 &&
+             data.type in ['scan_in', 'consumed', 'waste', 'restock_order', 'adjustment'] &&
+             data.quantityDelta is number && data.quantityDelta >= -1000000 && data.quantityDelta <= 1000000 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+             data.estimatedValue is number && data.estimatedValue >= 0 && data.estimatedValue <= 10000000 &&
+             (!('reason' in data) || data.reason == null || (data.reason is string && data.reason.size() <= 160)) &&
+             data.status in ['logged', 'pending', 'ordered', 'received'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- User Profile ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'persona', 'tier', 'activeStoreId', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'persona', 'tier', 'activeStoreId', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'persona', 'tier', 'activeStoreId', 'updatedAt'])
+                       );
+
+      allow delete: if false;
+
+      // --- Stores / Locations ---
+      match /stores/{storeId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(storeId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(storeId) &&
+                         incoming().keys().hasAll(['userId', 'name', 'type', 'isDefault', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'name', 'type', 'address', 'isDefault', 'createdAt', 'updatedAt']) &&
+                         isValidStoreLocation(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(storeId) &&
+                         isValidStoreLocation(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'address', 'isDefault', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(storeId) && existing().isDefault == false;
+      }
+
+      // --- Inventory Items ---
+      match /items/{itemId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(itemId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(itemId) &&
+                         incoming().keys().hasAll(['userId', 'storeId', 'name', 'category', 'quantity', 'unit', 'minThreshold', 'maxThreshold', 'unitCost', 'expiryEpochMs', 'lastScanType', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'storeId', 'name', 'category', 'quantity', 'unit', 'minThreshold', 'maxThreshold', 'unitCost', 'expiryEpochMs', 'lastScanType', 'createdAt', 'updatedAt']) &&
+                         isValidInventoryItem(incoming(), userId) &&
+                         storeExistsAfter(userId, incoming().storeId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(itemId) &&
+                         isValidInventoryItem(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           // Action 1: Stock adjustment or scan replenishment
+                           incoming().diff(existing()).affectedKeys().hasOnly(['quantity', 'lastScanType', 'expiryEpochMs', 'unitCost', 'updatedAt']) ||
+                           // Action 2: Full item details edit
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'quantity', 'unit', 'minThreshold', 'maxThreshold', 'unitCost', 'expiryEpochMs', 'lastScanType', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(itemId);
+      }
+
+      // --- Activity, Waste & Restock Logs ---
+      match /activity_logs/{logId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(logId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(logId) &&
+                         incoming().keys().hasAll(['userId', 'storeId', 'itemName', 'type', 'quantityDelta', 'unit', 'estimatedValue', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'storeId', 'itemId', 'itemName', 'type', 'quantityDelta', 'unit', 'estimatedValue', 'reason', 'status', 'createdAt', 'updatedAt']) &&
+                         isValidActivityLog(incoming(), userId) &&
+                         storeExistsAfter(userId, incoming().storeId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(logId) &&
+                         isValidActivityLog(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().storeId == existing().storeId &&
+                         incoming().type == existing().type &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().status in ['pending', 'ordered'] &&
+                         incoming().status in ['ordered', 'received'] &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reason', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(logId);
+      }
+    }
+  }
+}
